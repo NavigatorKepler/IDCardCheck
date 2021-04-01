@@ -1,5 +1,7 @@
 #define READBUF 256
+#define STRMAX  32
 #define LISTMAX 3600
+#define OUTOFRANGE listptr+1
 
 #include <stdio.h>
 #include <stdint.h>
@@ -11,11 +13,11 @@ struct POSITION {
     uint8_t local[64];
 } __preread, __current, position_list[LISTMAX];
 
-uint8_t readbuf[READBUF];
+int8_t readbuf[READBUF];
 
 size_t listptr=0;
 
-int LoadList() {
+uint32_t LoadList() {
     FILE* fp=fopen("IDcard.txt", "r");
     if (fp == NULL) {
         return 1;
@@ -35,14 +37,16 @@ int LoadList() {
     return 0;
 }
 
-int32_t searchIndex(uint32_t code) {
-    int32_t imax=listptr;
-    int32_t imin=0;
-    int32_t index=(imax + imin) / 2;
+uint32_t searchIndex(uint32_t code) {
+    uint32_t imax=listptr;
+    uint32_t imin=0;
+    uint32_t index=(imax + imin) / 2;
     __current=position_list[index];
     while (imin < imax) {
-        printf("code=%d, imin=%d, imax=%d, ptr=%d\r", code, imin, imax, index);
-        if (__current.code == code) {
+        // printf("code=%d, imin=%d, imax=%d, ptr=%d\r", code, imin, imax, index);
+        if ((imax - imin) / 2 < 1) {
+            return OUTOFRANGE;
+        } else if (__current.code == code) {
             // printf("\n");
             return index;
         } else if (__current.code > code) {
@@ -57,7 +61,7 @@ int32_t searchIndex(uint32_t code) {
         // printf("\n");
         return index;
     } else {
-        return -1;
+        return OUTOFRANGE;
     }
 }
 
@@ -66,13 +70,14 @@ void main() {
 
     uint8_t  c;
     uint8_t  stopflag=0;
-    uint8_t  IDtemp[19];
+    uint8_t   IDtemp[STRMAX]={};
+    uint32_t strlength=0;
     uint32_t _T1, _T2;
     uint32_t location=0, biry=0, birm=0, bird=0, cnt=0, chk=0;
-    int32_t  realLocationID1, realLocationID2, realLocationID3;
+    uint32_t realLocationID1, realLocationID2, realLocationID3;
 
     uint8_t  weight[17] = {7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2};
-    uint8_t  ZtoM[11] = {'1', '0', 'X', '9', '8', '7', '6', '5', '4', '3', '2'};
+    char  ZtoM[11] = {'1', '0', 'X', '9', '8', '7', '6', '5', '4', '3', '2'};
 
     // 用于验证二分查找
     // for (int i=0;i<listptr;i++) {
@@ -83,17 +88,19 @@ void main() {
     // }
 
     while (1) {
-        stopflag=0;
+        stopflag=0;location=0;
+        biry=0;birm=0;bird=0;
+        cnt=0;chk=0;
+        memset(IDtemp, 0, sizeof(uint8_t)*STRMAX);
         printf("请输入18位身份证号:");
-        scanf("%18s", &IDtemp[0]);
+        scanf("%18s", IDtemp);
         while ((c = fgetc(stdin)) != '\n' && c != EOF);
-        if (strlen(IDtemp) < 18) {
-            printf("身份证长度不正确!\n");
-            stopflag=1;
+
+        for (strlength=0;IDtemp[strlength]!='\0'&&strlength<STRMAX;strlength++);
+        if (strlength<18) {
+            printf("身份证长度不足18位!\n");
+            continue;
         }
-        if (stopflag == 1) continue;
-
-
         for (uint32_t i=0;i<17;i++) {
             if (IDtemp[i]-'0'<0 || IDtemp[i]-'9'>9) {
                 printf("输入中混入了非法字符!\n");
@@ -112,7 +119,7 @@ void main() {
         }
         if (stopflag == 1) continue;
 
-        char res=chk%11;
+        uint32_t res=chk%11;
         if (ZtoM[res] != IDtemp[17]) {
             printf("输入的身份证%s不合法!\n",IDtemp);
             stopflag=1;
@@ -140,6 +147,8 @@ void main() {
             cnt+=IDtemp[i+14]-'0';
         }
 
+        _T1 = 0;
+        _T2 = 0;
         _T1 = location/10000;
         _T2 = location/100;
         _T1 *= 10000;
@@ -147,7 +156,7 @@ void main() {
         realLocationID1 = searchIndex(_T1);
         realLocationID2 = searchIndex(_T2);
         realLocationID3 = searchIndex(location);
-        if (realLocationID3 == -1 || realLocationID2 == -1 || realLocationID1 == -1) {
+        if (realLocationID3 == OUTOFRANGE || realLocationID2 == OUTOFRANGE || realLocationID1 == OUTOFRANGE) {
             printf("身份证的地区无效!\n");
             stopflag=1;
         } else {
